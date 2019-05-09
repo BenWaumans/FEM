@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 3.10)
 PROJECT(FEM C CXX)
 
+# Set use compiler flags for configure based projects
 set(C_FLAGS ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE})
 set(CXX_FLAGS ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE})
 # set(Fortran_FLAGS ${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_RELEASE})
@@ -66,35 +67,46 @@ include(ExternalProject)
 list(APPEND OPENMPI_ARGS "--prefix=${CMAKE_INSTALL_PREFIX}")
 list(APPEND OPENMPI_ARGS "--enable-mpi-cxx")
 # list(APPEND OPENMPI_ARGS "--enable-cxx-exceptions")
+# list(APPEND OPENMPI_ARGS "--enable-static")
+# list(APPEND OPENMPI_ARGS "--disable-shared")
 list(APPEND OPENMPI_ARGS "CC=${CMAKE_C_COMPILER}")
 list(APPEND OPENMPI_ARGS "CFLAGS=${C_FLAGS}")
 list(APPEND OPENMPI_ARGS "CXX=${CMAKE_CXX_COMPILER}")
 list(APPEND OPENMPI_ARGS "CXXFLAGS=${CXX_FLAGS}")
 
-ExternalProject_Add(openmpi
-    URL "https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.1.tar.gz"
-    CONFIGURE_COMMAND cd <BINARY_DIR> && <SOURCE_DIR>/configure --srcdir=<SOURCE_DIR> ${OPENMPI_ARGS}
-)
+# sudo apt-get install libopenmpi-dev openmpi-bin openmpi-common openmpi-doc
+
+# ExternalProject_Add(openmpi
+#   URL "https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.1.tar.gz"
+#   CONFIGURE_COMMAND cd <BINARY_DIR> && <SOURCE_DIR>/configure --srcdir=<SOURCE_DIR> ${OPENMPI_ARGS}
+# )
+
+set(OPENMPI_LIBRARIES
+  "${CMAKE_INSTALL_PREFIX}/lib/libmpi_cxx.a"
+  "${CMAKE_INSTALL_PREFIX}/lib/libmpi.a")
 
 list(APPEND HYPRE_ARGS "-DHYPRE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 
 ExternalProject_Add(hypre
-    URL "https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-2.10.0b.tar.gz"
-    # CMAKE_ARGS ${FEM_ARGS}
-    CONFIGURE_COMMAND ${CMAKE_COMMAND} ${FEM_ARGS} ${HYPRE_ARGS} <SOURCE_DIR>/src
-    DEPENDS openmpi
+  URL "https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-2.10.0b.tar.gz"
+  # CMAKE_ARGS ${FEM_ARGS}
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} ${FEM_ARGS} ${HYPRE_ARGS} <SOURCE_DIR>/src
+  # DEPENDS openmpi
 )
 
-# list(APPEND METIS_ARGS "-DMETIS_PATH=<SOURCE_DIR>/metis")
+set(HYPRE_LIBRARIES
+  "${CMAKE_INSTALL_PREFIX}/lib/libHYPRE.a")
+
 list(APPEND METIS_ARGS "-DGKLIB_PATH=<SOURCE_DIR>/GKlib")
 
 ExternalProject_Add(metis
-    URL "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz"
-    # URL "http://glaros.dtc.umn.edu/gkhome/fetch/sw/parmetis/OLD/parmetis-4.0.tar.gz"
-    CMAKE_ARGS ${FEM_ARGS} ${METIS_ARGS}
-    # CONFIGURE_COMMAND ${CMAKE_COMMAND} ${FEM_ARGS} ${METIS_ARGS} <SOURCE_DIR>/src
-    DEPENDS openmpi
+  URL "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz"
+  CMAKE_ARGS ${FEM_ARGS} ${METIS_ARGS}
+  # DEPENDS openmpi
 )
+
+set(METIS_LIBRARIES
+  "${CMAKE_INSTALL_PREFIX}/lib/libmetis.a")
 
 list(APPEND MFEM_ARGS "-DMETIS_DIR=${CMAKE_INSTALL_PREFIX}")
 list(APPEND MFEM_ARGS "-DHYPRE_DIR=${CMAKE_INSTALL_PREFIX}")
@@ -103,17 +115,80 @@ list(APPEND MFEM_ARGS "-DMFEM_ENABLE_TESTING=ON")
 list(APPEND MFEM_ARGS "-DMFEM_ENABLE_EXAMPLES=ON")
 list(APPEND MFEM_ARGS "-DMFEM_ENABLE_MINIAPPS=ON")
 
+# https://github.com/LLNL/mfem/archive/v4.0-rc1.tar.gz
 ExternalProject_Add(mfem
-    URL "http://mfem.github.io/releases/mfem-3.4.tgz"
-    CMAKE_ARGS ${FEM_ARGS} ${MFEM_ARGS}
-    DEPENDS hypre metis
+  URL "http://mfem.github.io/releases/mfem-3.4.tgz"
+  CMAKE_ARGS ${FEM_ARGS} ${MFEM_ARGS}
+  DEPENDS hypre metis
 )
+
+list(APPEND OPENCASCADE_ARGS "-DOCE_INSTALL_PREFIX=../install")
+list(APPEND OPENCASCADE_ARGS "-DOCE_MULTITHREAD_LIBRARY=OPENMP")
+list(APPEND OPENCASCADE_ARGS "-DOCE_TESTING=OFF")
+list(APPEND OPENCASCADE_ARGS "-DOCE_VISUALISATION=OFF")
+list(APPEND OPENCASCADE_ARGS "-DOCE_ADD_HEADERS=ON")
+list(APPEND OPENCASCADE_ARGS "-DOCE_BUILD_SHARED_LIB=OFF")
+list(APPEND OPENCASCADE_ARGS "-DOCE_BUILD_STATIC_LIB=ON")
+list(APPEND OPENCASCADE_ARGS "-DOCE_DISABLE_X11=OFF")
+
+# ExternalProject_Add(opencascade
+#   URL "https://github.com/tpaviot/oce/archive/OCE-0.18.3.tar.gz"
+#   CMAKE_ARGS ${FEM_ARGS} ${OPENCASCADE_ARGS}
+#   DEPENDS metis
+# )
+
+list(APPEND NETGEN_ARGS "-DUSE_MPI=ON")
+list(APPEND NETGEN_ARGS "-DUSE_PYTHON=OFF")
+list(APPEND NETGEN_ARGS "-DUSE_GUI=OFF")
+list(APPEND NETGEN_ARGS "-DUSE_OCC=ON")
+
+# list(APPEND NETGEN_ARGS "--prefix=${CMAKE_INSTALL_PREFIX}")
+# list(APPEND NETGEN_ARGS "--disable-gui")
+# list(APPEND NETGEN_ARGS "--enable-parallel")
+# list(APPEND NETGEN_ARGS "--disable-shared")
+# list(APPEND NETGEN_ARGS "--enable-static")
+# list(APPEND NETGEN_ARGS "--enable-nglib")
+# list(APPEND NETGEN_ARGS "--with-metis=${CMAKE_INSTALL_PREFIX}")
+# list(APPEND NETGEN_ARGS "CC=/usr/bin/mpicc")
+# list(APPEND NETGEN_ARGS "CXX=/usr/bin/mpicxx")
+
+# ExternalProject_Add(netgen
+#   # URL "https://netcologne.dl.sourceforge.net/project/netgen-mesher/netgen-mesher/5.3/netgen-5.3.1.tar.gz"
+#   # CONFIGURE_COMMAND cd <BINARY_DIR> && <SOURCE_DIR>/configure --srcdir=<SOURCE_DIR> ${NETGEN_ARGS}
+#   URL "https://github.com/NGSolve/netgen/archive/v6.2.1810.tar.gz"
+#   CMAKE_ARGS ${FEM_ARGS} ${NETGEN_ARGS}
+#   DEPENDS metis opencascade
+# )
+
+# list(APPEND PLASM_ARGS "CXX=/usr/bin/mpicxx")
+
+# ExternalProject_Add(plasm
+#   URL "http://www.plasm.net/download/latest-classic-release-51/sources.tgz"
+#   CONFIGURE_COMMAND ""
+# )
+
+ExternalProject_Get_Property(mfem SOURCE_DIR)
+set(MFEM_CMAKE_MODULE_PATH ${SOURCE_DIR}/config/cmake/modules)
+
+set(MFEM_LIBRARIES
+  "${CMAKE_INSTALL_PREFIX}/lib/libmfem.a")
 
 list(APPEND GLVIS_ARGS "-DMFEM_DIR=${CMAKE_INSTALL_PREFIX}")
 
 ExternalProject_Add(glvis
-    URL "http://glvis.github.io/releases/glvis-3.4.tgz"
-    CMAKE_ARGS ${FEM_ARGS} ${GLVIS_ARGS}
-    DEPENDS mfem
+  URL "http://glvis.github.io/releases/glvis-3.4.tgz"
+  CMAKE_ARGS ${FEM_ARGS} ${GLVIS_ARGS}
+  DEPENDS mfem
 )
 
+# list(APPEND FEM_SOLVER_ARGS "-DMFEM_CMAKE_MODULE_PATH=${MFEM_CMAKE_MODULE_PATH}")
+list(APPEND FEM_SOLVER_ARGS "-DMETIS_DIR=${CMAKE_INSTALL_PREFIX}")
+list(APPEND FEM_SOLVER_ARGS "-DHYPRE_DIR=${CMAKE_INSTALL_PREFIX}")
+list(APPEND FEM_SOLVER_ARGS "-DMFEM_DIR=${CMAKE_INSTALL_PREFIX}")
+
+ExternalProject_Add(fem_solver
+  DOWNLOAD_COMMAND ""
+  SOURCE_DIR ${PROJECT_SOURCE_DIR}/FemSolver
+  CMAKE_ARGS ${FEM_ARGS} ${FEM_SOLVER_ARGS}
+  DEPENDS mfem
+)
