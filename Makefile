@@ -11,10 +11,11 @@ BUILD_DIR = $(ROOT_DIR)/build
 INSTALL_DIR = $(ROOT_DIR)/install
 
 # Release
+# Debug
 CMAKE = cmake
 CMAKE_ARGS = \
 	"-DCMAKE_INSTALL_PREFIX=$(INSTALL_DIR)" \
-	"-DCMAKE_BUILD_TYPE=Debug" \
+	"-DCMAKE_BUILD_TYPE=Release" \
 	"-DCXX_STANDARD=17"
 
 all: $(BUILD_DIR)/make.stamp
