@@ -1,6 +1,19 @@
 cmake_minimum_required (VERSION 3.10)
 PROJECT(fem_solver C CXX)
 
+# Require C++11 and disable compiler-specific extensions
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Set the target CUDA architecture
+option(USE_CUDA "Enable CUDA" OFF)
+if(USE_CUDA)
+  set(CUDA_ARCH "sm_60" CACHE STRING "Target CUDA architecture.")
+endif()
+
+option(USE_MPI "Enable MPI" OFF)
+
 # set(MFEM_CMAKE_MODULE_PATH "mfem" CACHE PATH "Path to the mfem cmake module folder")
 
 
@@ -10,10 +23,12 @@ set(FEM_SOLVER_VERSION_PATCH 0)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/config/cmake/modules)
 
-find_package(MPI REQUIRED)
-set(MPI_CXX_INCLUDE_DIRS ${MPI_CXX_INCLUDE_PATH})
-find_package(HYPRE REQUIRED)
-find_package(METIS REQUIRED)
+if(USE_MPI)
+  find_package(MPI REQUIRED)
+  set(MPI_CXX_INCLUDE_DIRS ${MPI_CXX_INCLUDE_PATH})
+  find_package(HYPRE REQUIRED)
+  find_package(METIS REQUIRED)
+endif()
 find_package(OpenMP REQUIRED)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -31,7 +46,11 @@ find_package(MFEM REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
 #    With newer versions of SuiteSparse which include METIS header using 64-bit
 #    integers, the METIS header (with 32-bit indices, as used by mfem) needs to
 #    be before SuiteSparse.
-set(FEM_SOLVER_TPLS MPI_CXX OpenMP METIS HYPRE MFEM)
+if(USE_MPI)
+  set(FEM_SOLVER_TPLS MPI_CXX OpenMP METIS HYPRE MFEM)
+else()
+  set(FEM_SOLVER_TPLS OpenMP MFEM)
+endif()
 # Add all *_FOUND libraries in the variable TPL_LIBRARIES.
 set(TPL_LIBRARIES "")
 set(TPL_INCLUDE_DIRS "")
@@ -47,6 +66,8 @@ list(REMOVE_DUPLICATES TPL_INCLUDE_DIRS)
 message(STATUS "TPL_LIBRARIES = ${TPL_LIBRARIES}")
 message(STATUS "TPL_INCLUDE_DIRS = ${TPL_INCLUDE_DIRS}")
 include_directories(${TPL_INCLUDE_DIRS})
+
+
 
 get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
 foreach(dir ${dirs})
