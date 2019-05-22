@@ -1,14 +1,7 @@
-
-
-# paralel:
-# 	https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.1.tar.gz
-# 	https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-2.10.0b.tar.gz
-# 	http://glaros.dtc.umn.edu/gkhome/metis/metis/overview
-
 ROOT_DIR=$(realpath .)
 
-BUILD_DIR = $(ROOT_DIR)/build
-INSTALL_DIR = $(ROOT_DIR)/install
+BUILD_DIR ?= $(ROOT_DIR)/build
+INSTALL_DIR ?= $(ROOT_DIR)/install
 
 GCC ?= /usr/bin/x86_64-linux-gnu-
 GCC-SUFFIX ?= -6
@@ -47,11 +40,10 @@ ifeq ($(USE_MPI), 1)
 	CMAKE_ARGS += "-DUSE_MPI=ON"
 ifeq ($(BUILD_MPI), 1)
 	CMAKE_ARGS += "-DBUILD_MPI=ON"
-		
 endif
 endif
 
-all: $(BUILD_DIR)/make.stamp
+all: $(INSTALL_DIR)/fem_solver
 
 $(BUILD_DIR)/CMakeCache.txt: $(ROOT_DIR)/CMakeLists.txt $(MAKEFILE_LIST)
 	@echo "[CMAKE] $(BUILD_DIR)"
@@ -63,6 +55,11 @@ $(BUILD_DIR)/make.stamp: $(BUILD_DIR)/CMakeCache.txt
 	@mkdir -p $(INSTALL_DIR)
 	$(MAKE) -C $(dir $<)
 	@touch $@
+
+$(INSTALL_DIR)/fem_solver: $(BUILD_DIR)/make.stamp
+	@echo "[INSTALL] $(INSTALL_DIR)"
+	@mkdir -p $(INSTALL_DIR)
+	$(MAKE) -C $(dir $<) install
 
 clean:
 	@echo "[clean] $(BUILD_DIR) $(INSTALL_DIR)"

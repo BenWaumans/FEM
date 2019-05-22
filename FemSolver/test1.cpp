@@ -108,13 +108,6 @@ int main(int argc, char *argv[])
          << endl
          << "Assembling: " << flush;
 
-    // 5.b Set device config parameters from the command line options and switch
-    //    to working on the device.
-#ifdef MFEM_USE_CUDA
-    Device::Configure("cuda");
-    Device::Print();
-#endif
-
     // 6. Determine the list of true (i.e. conforming) essential boundary dofs.
     //    In this example, the boundary conditions are defined by marking only
     //    boundary attribute 1 from the mesh as essential and converting it to a
@@ -150,10 +143,15 @@ int main(int argc, char *argv[])
     LinearForm *b = new LinearForm(fespace);
     b->AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(f));
     cout << "r.h.s. ... " << flush;
+    b->Assemble();
+
+    // 7.b Set device config parameters from the command line options and switch
+    //    to working on the device.
 #ifdef MFEM_USE_CUDA
+    Device::Configure("cuda");
+    Device::Print();
     Device::Enable();
 #endif
-    b->Assemble();
 
     // 8. Define the solution vector x_grid as a finite element grid function
     //    corresponding to fespace. Initialize x_grid with initial guess of zero,
@@ -172,6 +170,7 @@ int main(int argc, char *argv[])
     PWConstCoefficient mu_func(mu);
 
     BilinearForm *a = new BilinearForm(fespace);
+    // a->SetAssemblyLevel(AssemblyLevel::PARTIAL);
     a->AddDomainIntegrator(new ElasticityIntegrator(lambda_func, mu_func));
 
     // 10. Assemble the bilinear form and the corresponding linear system,
@@ -206,13 +205,13 @@ int main(int argc, char *argv[])
     umf_solver.Mult(B, X);
 #endif
 
-    // 11.b Switch back to the host.
+    // 12. Recover the solution as a finite element grid function.
+    a->RecoverFEMSolution(X, *b, x_grid);
+
+    // 12.b Switch back to the host.
 #ifdef MFEM_USE_CUDA
     Device::Disable();
 #endif
-
-    // 12. Recover the solution as a finite element grid function.
-    a->RecoverFEMSolution(X, *b, x_grid);
 
     // 13. For non-NURBS meshes, make the mesh curved based on the finite
     // element
