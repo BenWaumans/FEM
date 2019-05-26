@@ -1,14 +1,13 @@
 cmake_minimum_required (VERSION 3.8 FATAL_ERROR)
-PROJECT(FEM_SOLVER LANGUAGES C CXX)
+PROJECT(FEM_SOLVER VERSION 0.0.0.0 LANGUAGES C CXX)
+
+set(EP_BASE "")
+set_directory_properties(PROPERTIES EP_BASE "${CMAKE_BINARY_DIR}/externals")
 
 # Require C++11 and disable compiler-specific extensions
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-set(FEM_SOLVER_VERSION_MAJOR 0)
-set(FEM_SOLVER_VERSION_MINOR 0)
-set(FEM_SOLVER_VERSION_PATCH 0)
 
 option(USE_MPI "Enable MPI" OFF)
 if(USE_MPI)
@@ -17,14 +16,23 @@ endif()
 
 option(USE_CUDA "Enable CUDA" OFF)
 if (USE_CUDA)
-  set(CUDA_ARCH "sm_61" CACHE STRING "Target CUDA architecture.")
+  set(CUDA_ARCH
+    "sm_30" "sm_32" "sm_35" "sm_37"
+    "sm_50" "sm_52" "sm_53"
+    "sm_60" "sm_61" "sm_62"
+    "sm_70" "sm_72" "sm_75"
+    CACHE STRING "Target CUDA architecture(s).")
   enable_language(CUDA)
-  message(STATUS "Using CUDA architecture: ${CUDA_ARCH}")
+  message(STATUS "Using CUDA architecture(s): ${CUDA_ARCH}")
 
   set(CMAKE_CUDA_STANDARD 11)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   set(CMAKE_CUDA_EXTENSIONS OFF)
-  set(CMAKE_CUDA_FLAGS "-arch=${CUDA_ARCH} --expt-extended-lambda"
+  foreach(arch ${CUDA_ARCH})
+    set(APPEND CUDA_ARCHS "-arch=${arch}")
+  endforeach()
+
+  set(CMAKE_CUDA_FLAGS ${CUDA_ARCHS} "--expt-extended-lambda"
       CACHE STRING "CUDA flags set for FEM_SOLVER" FORCE)
   if(USE_MPI)
     set(CUDA_CCBIN_COMPILER ${MPI_CXX_COMPILER})
@@ -44,16 +52,41 @@ if (OPENMP_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   set(USE_OPENMP ON)
 else()
-set(USE_OPENMP OFF)
+  set(USE_OPENMP OFF)
 endif()
+
+set(DEPENDENCIES_INSTALL_DIR "${PROJECT_BINARY_DIR}/dependencies")
+set(DEPENDENCIES_LIB_DIR "${DEPENDENCIES_INSTALL_DIR}/lib")
+set(DEPENDENCIES_BIN_DIR "${DEPENDENCIES_INSTALL_DIR}/bin")
+set(DEPENDENCIES_INCLUDE_DIR "${DEPENDENCIES_INSTALL_DIR}/include")
+
+macro(add_static_lib TARGET LIB)
+  ExternalProject_Get_Property(${TARGET} INSTALL_DIR)
+  if(NOT "${LIB}" IN_LIST LIBRARIES)
+    add_library(${LIB} STATIC IMPORTED)
+    set_target_properties(${LIB} PROPERTIES IMPORTED_LOCATION
+      "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${LIB}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    list(APPEND LIBRARIES "${LIB}")
+  endif()
+endmacro(add_static_lib)
+
+macro(add_include TARGET)
+  ExternalProject_Get_Property(${TARGET} INSTALL_DIR)
+  set(SUB_DIR "${ARGV1}")
+  if(SUB_DIR)
+    list(APPEND INCLUDE_DIRS "${INSTALL_DIR}/include/${SUB_DIR}")
+  else()
+    list(APPEND INCLUDE_DIRS "${INSTALL_DIR}/include")
+  endif()
+  set(${TARGET}_INSTALL_DIR "${INSTALL_DIR}")
+endmacro(add_include)
 
 # Set use compiler flags for configure based projects
 set(C_FLAGS ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE})
 set(CXX_FLAGS ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE})
-# set(Fortran_FLAGS ${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_RELEASE})
 set(EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER} ${CMAKE_EXE_LINKER})
 
-set(FEM_ARGS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}"
+set(FEM_ARGS "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
              "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
              "-DCMAKE_AR=${CMAKE_AR}"
              "-DCMAKE_LINKER=${CMAKE_LINKER}"
@@ -98,22 +131,11 @@ set(FEM_ARGS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}"
              "-DCMAKE_CXX_FLAGS_MINSIZEREL=${CMAKE_CXX_FLAGS_MINSIZEREL}"
              "-DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}"
              "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=${CMAKE_CXX_FLAGS_RELWITHDEBINFO}"
-             "-DCXX_STANDARD=${CXX_STANDARD}")
-#             "-DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}"
-#             "-DCMAKE_Fortran_COMPILER_AR=${CMAKE_Fortran_COMPILER_AR}"
-#             "-DCMAKE_Fortran_COMPILER_RANLIB=${CMAKE_Fortran_COMPILER_RANLIB}"
-#             "-DCMAKE_Fortran_FLAGS=${CMAKE_Fortran_FLAGS}"
-#             "-DCMAKE_Fortran_FLAGS_DEBUG=${CMAKE_Fortran_FLAGS_DEBUG}"
-#             "-DCMAKE_Fortran_FLAGS_MINSIZEREL=${CMAKE_Fortran_FLAGS_MINSIZEREL}"
-#             "-DCMAKE_Fortran_FLAGS_RELEASE=${CMAKE_Fortran_FLAGS_RELEASE}"
-#             "-DCMAKE_Fortran_FLAGS_RELWITHDEBINFO=${CMAKE_Fortran_FLAGS_RELWITHDEBINFO}")
+             "-DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
 
 include(ExternalProject)
 
-set(INCLUDE_DIRS "${CMAKE_INSTALL_PREFIX}/include")
-
 if(USE_MPI)
-
   find_package(MPI REQUIRED)
   if (MPI_CXX_FOUND)
     list(APPEND LIBRARIES ${MPI_CXX_LIBRARIES})
@@ -144,117 +166,177 @@ if(USE_MPI)
                    "-DMPI_mpi_cxx_LIBRARY=${MPI_mpi_cxx_LIBRARY}")
 
 
-  list(APPEND HYPRE_ARGS ${MPI_COMPILER})
-  list(APPEND HYPRE_ARGS "-DHYPRE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
-  list(APPEND HYPRE_ARGS "-DHYPRE_USING_OPENMP=${USE_OPENMP}")
+  set(HYPRE_ARGS  ${MPI_COMPILER}
+                  "-DHYPRE_INSTALL_PREFIX=${DEPENDENCIES_INSTALL_DIR}"
+                  "-DHYPRE_USING_OPENMP=${USE_OPENMP}"
+                  "-S<SOURCE_DIR>/src")
 
-  ExternalProject_Add(hypre
+  ExternalProject_Add(hypre_project
     URL "https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods/download/hypre-2.10.0b.tar.gz"
-    # CMAKE_ARGS ${FEM_ARGS}
-    CONFIGURE_COMMAND ${CMAKE_COMMAND} ${FEM_ARGS} ${HYPRE_ARGS} <SOURCE_DIR>/src
+    CMAKE_ARGS ${FEM_ARGS} ${HYPRE_ARGS}
+    # CONFIGURE_COMMAND ${CMAKE_COMMAND} ${FEM_ARGS} ${HYPRE_ARGS} <SOURCE_DIR>/src
   )
 
-  list(APPEND LIBRARIES "${CMAKE_INSTALL_PREFIX}/lib/libHYPRE.a")
+  add_static_lib(hypre_project HYPRE)
+  add_include(hypre_project)
 
-  list(APPEND METIS_ARGS ${MPI_COMPILER})
-  list(APPEND METIS_ARGS "-DGKLIB_PATH=<SOURCE_DIR>/GKlib")
-  list(APPEND METIS_ARGS "-DOPENMP=${USE_OPENMP}")
+  set(METIS_ARGS ${MPI_COMPILER}
+                 "-DGKLIB_PATH=<SOURCE_DIR>/GKlib"
+                 "-DOPENMP=${USE_OPENMP}")
 
-  ExternalProject_Add(metis
+  ExternalProject_Add(metis_project
     URL "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz"
     CMAKE_ARGS ${FEM_ARGS} ${METIS_ARGS}
   )
 
-  list(APPEND LIBRARIES "${CMAKE_INSTALL_PREFIX}/lib/libmetis.a")
+  add_static_lib(metis_project metis)
+  add_include(metis_project)
 endif()
 
+set(MFEM_ARGS "-DMFEM_USE_CUDA=${USE_CUDA}"
+              "-DMFEM_USE_MPI=${USE_MPI}"
+              "-DMFEM_ENABLE_TESTING=ON"
+              "-DMFEM_ENABLE_EXAMPLES=OFF"
+              "-DMFEM_ENABLE_MINIAPPS=OFF"
+              "-DMFEM_USE_OPENMP=${USE_OPENMP}"
+              "-DMFEM_THREAD_SAFE=ON")
 if (USE_MPI)
-  list(APPEND MFEM_ARGS ${MPI_COMPILER})
-  list(APPEND MFEM_ARGS "-DMETIS_DIR=${CMAKE_INSTALL_PREFIX}")
-  list(APPEND MFEM_ARGS "-DHYPRE_DIR=${CMAKE_INSTALL_PREFIX}")
+  list(APPEND MFEM_ARGS ${MPI_COMPILER}
+                        "-DMETIS_DIR=${DEPENDENCIES_INSTALL_DIR}"
+                        "-DHYPRE_DIR=${DEPENDENCIES_INSTALL_DIR}")
 endif()
-list(APPEND MFEM_ARGS "-DMFEM_USE_CUDA=${USE_CUDA}")
 if (USE_CUDA)
   list(APPEND MFEM_ARGS "-DCUDA_ARCH=${CUDA_ARCH}")
 endif()
-list(APPEND MFEM_ARGS "-DMFEM_USE_MPI=${USE_MPI}")
-list(APPEND MFEM_ARGS "-DMFEM_ENABLE_TESTING=ON")
-list(APPEND MFEM_ARGS "-DMFEM_ENABLE_EXAMPLES=ON")
-list(APPEND MFEM_ARGS "-DMFEM_ENABLE_MINIAPPS=ON")
-list(APPEND MFEM_ARGS "-DMFEM_USE_OPENMP=${USE_OPENMP}")
-list(APPEND MFEM_ARGS "-DMFEM_THREAD_SAFE=ON")
 
 if (USE_MPI)
-  set(MFEM_DEPENDS hypre metis)
+  set(MFEM_DEPENDS hypre_project metis_project)
 else()
   set(MFEM_DEPENDS "")
 endif()
 
-ExternalProject_Add(mfem
-  # URL "http://mfem.github.io/releases/mfem-3.4.tgz"
+ExternalProject_Add(mfem_project
   # URL "https://github.com/mfem/mfem/archive/v4.0-rc2.tar.gz"
   GIT_REPOSITORY git@github.com:mfem/mfem.git
-  GIT_TAG memory-dev
+  GIT_TAG master
+  GIT_SHALLOW ON
+  GIT_PROGRESS ON
   CMAKE_ARGS ${FEM_ARGS} ${MFEM_ARGS}
   DEPENDS ${MFEM_DEPENDS}
 )
 
-list(APPEND LIBRARIES "${CMAKE_INSTALL_PREFIX}/lib/libmfem.a")
+add_static_lib(mfem_project mfem)
+add_include(mfem_project)
 
-list(APPEND OPENCASCADE_ARGS "-DOCE_INSTALL_PREFIX=../install")
+list(APPEND OPENCASCADE_ARGS )
+set(OPENCASCADE_ARGS "-DOCE_INSTALL_PREFIX=<INSTALL_DIR>"
+                     "-DOCE_TESTING=OFF"
+                     "-DOCE_VISUALISATION=OFF"
+                     "-DOCE_ADD_HEADERS=ON"
+                     "-DOCE_BUILD_SHARED_LIB=OFF"
+                     "-DOCE_BUILD_STATIC_LIB=ON"
+                     "-DOCE_DISABLE_X11=OFF")
 if(USE_OPENMP)
   list(APPEND OPENCASCADE_ARGS "-DOCE_MULTITHREAD_LIBRARY=OPENMP")
 endif()
-list(APPEND OPENCASCADE_ARGS "-DOCE_TESTING=OFF")
-list(APPEND OPENCASCADE_ARGS "-DOCE_VISUALISATION=OFF")
-list(APPEND OPENCASCADE_ARGS "-DOCE_ADD_HEADERS=ON")
-list(APPEND OPENCASCADE_ARGS "-DOCE_BUILD_SHARED_LIB=OFF")
-list(APPEND OPENCASCADE_ARGS "-DOCE_BUILD_STATIC_LIB=ON")
-list(APPEND OPENCASCADE_ARGS "-DOCE_DISABLE_X11=OFF")
 
-# ExternalProject_Add(opencascade
-#   URL "https://github.com/tpaviot/oce/archive/OCE-0.18.3.tar.gz"
-#   CMAKE_ARGS ${FEM_ARGS} ${OPENCASCADE_ARGS}
-#   DEPENDS metis
-# )
+ExternalProject_Add(opencascade_project
+  URL "https://github.com/tpaviot/oce/archive/OCE-0.18.3.tar.gz"
+  CMAKE_ARGS ${FEM_ARGS} ${OPENCASCADE_ARGS}
+)
 
-list(APPEND NETGEN_ARGS "-DUSE_MPI=${USE_MPI}")
-list(APPEND NETGEN_ARGS "-DUSE_PYTHON=OFF")
-list(APPEND NETGEN_ARGS "-DUSE_GUI=OFF")
-list(APPEND NETGEN_ARGS "-DUSE_OCC=ON")
+set(OPENCASCADE_LIBRARIES "TKernel"
+                          "TKMath"
+                          "TKG2d"
+                          "TKG3d"
+                          "TKGeomBase"
+                          "TKBRep"
+                          "TKGeomAlgo"
+                          "TKTopAlgo"
+                          "TKPrim"
+                          "TKBO"
+                          "TKHLR"
+                          "TKMesh"
+                          "TKShHealing"
+                          "TKXMesh"
+                          "TKBool"
+                          "TKFillet"
+                          "TKFeat"
+                          "TKOffset"
+                          "TKService"
+                          "TKV3d"
+                          "TKCDF"
+                          "PTKernel"
+                          "TKLCAF"
+                          "FWOSPlugin"
+                          "TKPShape"
+                          "TKBinL"
+                          "TKXmlL"
+                          "TKPLCAF"
+                          "TKTObj"
+                          "TKShapeSchema"
+                          "TKStdLSchema"
+                          "TKCAF"
+                          "TKBin"
+                          "TKXml"
+                          "TKPCAF"
+                          "TKBinTObj"
+                          "TKXmlTObj"
+                          "TKStdSchema"
+                          "TKSTL"
+                          "TKXSBase"
+                          "TKSTEPBase"
+                          "TKIGES"
+                          "TKSTEPAttr"
+                          "TKSTEP209"
+                          "TKSTEP"
+                          "TKVRML"
+                          "TKXCAF"
+                          "TKXCAFSchema"
+                          "TKXmlXCAF"
+                          "TKBinXCAF"
+                          "TKXDEIGES"
+                          "TKXDESTEP")
+list(REVERSE OPENCASCADE_LIBRARIES)
+foreach(lib ${OPENCASCADE_LIBRARIES})
+  add_static_lib(opencascade_project ${lib})
+endforeach()
+add_include(opencascade_project "oce")
 
-# list(APPEND NETGEN_ARGS "--prefix=${CMAKE_INSTALL_PREFIX}")
-# list(APPEND NETGEN_ARGS "--disable-gui")
-# list(APPEND NETGEN_ARGS "--enable-parallel")
-# list(APPEND NETGEN_ARGS "--disable-shared")
-# list(APPEND NETGEN_ARGS "--enable-static")
-# list(APPEND NETGEN_ARGS "--enable-nglib")
-# list(APPEND NETGEN_ARGS "--with-metis=${CMAKE_INSTALL_PREFIX}")
-# list(APPEND NETGEN_ARGS "CC=/usr/bin/mpicc")
-# list(APPEND NETGEN_ARGS "CXX=/usr/bin/mpicxx")
 
-# ExternalProject_Add(netgen
-#   # URL "https://netcologne.dl.sourceforge.net/project/netgen-mesher/netgen-mesher/5.3/netgen-5.3.1.tar.gz"
-#   # CONFIGURE_COMMAND cd <BINARY_DIR> && <SOURCE_DIR>/configure --srcdir=<SOURCE_DIR> ${NETGEN_ARGS}
-#   URL "https://github.com/NGSolve/netgen/archive/v6.2.1810.tar.gz"
-#   CMAKE_ARGS ${FEM_ARGS} ${NETGEN_ARGS}
-#   DEPENDS metis opencascade
-# )
+set(NETGEN_ARGS "-DUSE_MPI=${USE_MPI}"
+                "-DUSE_PYTHON=OFF"
+                "-DUSE_GUI=OFF"
+                "-DUSE_OCC=ON"
+                "-DOCC_LIBRARY=${opencascade_project_INSTALL_DIR}/lib"
+                "-DOCC_INCLUDE_DIR=${opencascade_project_INSTALL_DIR}/include/oce")
 
-# list(APPEND PLASM_ARGS "CXX=/usr/bin/mpicxx")
+if (USE_MPI)
+  set(NETGEN_DEPENDS opencascade_project metis_project)
+else()
+  set(NETGEN_DEPENDS opencascade_project)
+endif()
 
-# ExternalProject_Add(plasm
-#   URL "http://www.plasm.net/download/latest-classic-release-51/sources.tgz"
-#   CONFIGURE_COMMAND ""
-# )
+ExternalProject_Add(netgen_project
+  URL "https://github.com/NGSolve/netgen/archive/v6.2.1810.tar.gz"
+  CMAKE_ARGS ${FEM_ARGS} ${NETGEN_ARGS}
+  PATCH_COMMAND git -C <SOURCE_DIR> apply ${CMAKE_SOURCE_DIR}/patches/netgen.patch
+  DEPENDS ${NETGEN_DEPENDS}
+)
+
+# add_static_lib(netgen_project netgen)
+# add_include(netgen_project)
+
 if (NOT USE_CUDA)
-  list(APPEND GLVIS_ARGS "-DMFEM_DIR=${CMAKE_INSTALL_PREFIX}")
+  list(APPEND GLVIS_ARGS "-DMFEM_DIR=${DEPENDENCIES_INSTALL_DIR}")
 
   ExternalProject_Add(glvis
     URL "http://glvis.github.io/releases/glvis-3.4.tgz"
     CMAKE_ARGS ${FEM_ARGS} ${GLVIS_ARGS}
-    DEPENDS mfem
+    DEPENDS mfem_project
   )
+
+  install(PROGRAMS "${DEPENDENCIES_BIN_DIR}/glvis${EXE_SUFFIX}" DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
 add_subdirectory(FemSolver)
