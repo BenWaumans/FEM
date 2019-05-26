@@ -4,13 +4,6 @@ message(STATUS "LIBRARIES = ${LIBRARIES}")
 message(STATUS "INCLUDE_DIRS = ${INCLUDE_DIRS}")
 include_directories(${INCLUDE_DIRS})
 
-
-
-get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-foreach(dir ${dirs})
-  message(STATUS "dir='${dir}'")
-endforeach()
-
 file(GLOB SOURCES "*.cpp")
 message(STATUS "SOURCES: ${SOURCES}")
 

@@ -1,14 +1,13 @@
-#include "Config.h"
+#include "Config.hpp"
 #include "mfem.hpp"
+#include <chrono>
 #include <fstream>
 #include <iostream>
-#include <chrono>
 
 using namespace std;
 using namespace mfem;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     // 1. Parse command-line options.
     double x = 1;
     double y = 1;
@@ -29,17 +28,21 @@ int main(int argc, char *argv[])
     args.AddOption(&x, "-x", "--x-axis", "Size in the x axis direction.");
     args.AddOption(&y, "-y", "--y-axis", "Size in the y axis direction.");
     args.AddOption(&z, "-z", "--z-axis", "Size in the z axis direction.");
-    args.AddOption(&fx, "-fx", "--force-x-axis", "Force in the x axis direction.");
-    args.AddOption(&fy, "-fy", "--force-y-axis", "Force in the y axis direction.");
-    args.AddOption(&fz, "-fz", "--force-z-axis", "Force in the z axis direction.");
-    args.AddOption(&E, "-E", "--young-modulus", "Young's modulus (E) of the material.", true);
-    args.AddOption(&v, "-v", "--poisson-ratio", "Poisson's ratio (v) of the material.", true);
+    args.AddOption(&fx, "-fx", "--force-x-axis",
+                   "Force in the x axis direction.");
+    args.AddOption(&fy, "-fy", "--force-y-axis",
+                   "Force in the y axis direction.");
+    args.AddOption(&fz, "-fz", "--force-z-axis",
+                   "Force in the z axis direction.");
+    args.AddOption(&E, "-E", "--young-modulus",
+                   "Young's modulus (E) of the material.", true);
+    args.AddOption(&v, "-v", "--poisson-ratio",
+                   "Poisson's ratio (v) of the material.", true);
     args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                    "--no-visualization",
                    "Enable or disable GLVis visualization.");
     args.Parse();
-    if (!args.Good())
-    {
+    if (!args.Good()) {
         args.PrintUsage(cout);
         return 1;
     }
@@ -52,14 +55,14 @@ int main(int argc, char *argv[])
     Mesh *mesh = nullptr;
     {
         double max_value = std::max(std::max(x, y), z);
-        mesh = new Mesh(
-            ceil(x / max_value * 10.) * 10, ceil(y / max_value * 10.) * 10,
-            ceil(z / max_value * 10.) * 10, Element::Type::HEXAHEDRON, 1, x, y, z);
+        mesh = new Mesh(ceil(x / max_value * 10.) * 10,
+                        ceil(y / max_value * 10.) * 10,
+                        ceil(z / max_value * 10.) * 10,
+                        Element::Type::HEXAHEDRON, 1, x, y, z);
     }
     int dim = mesh->Dimension();
 
-    if (mesh->bdr_attributes.Max() < 2)
-    {
+    if (mesh->bdr_attributes.Max() < 2) {
         cerr << "\nInput mesh should have at least "
              << "two boundary attributes! (See schematic in test1.cpp)\n"
              << endl;
@@ -68,8 +71,7 @@ int main(int argc, char *argv[])
 
     // 3. Select the order of the finite element discretization space. For NURBS
     //    meshes, we increase the order by degree elevation.
-    if (mesh->NURBSext)
-    {
+    if (mesh->NURBSext) {
         mesh->DegreeElevate(order, order);
     }
 
@@ -78,9 +80,9 @@ int main(int argc, char *argv[])
     //    largest number that gives a final mesh with no more than 50,000
     //    elements.
     {
-        int ref_levels = (int)floor(log(50000. / mesh->GetNE()) / log(2.) / dim);
-        for (int l = 0; l < ref_levels; l++)
-        {
+        int ref_levels =
+            (int)floor(log(50000. / mesh->GetNE()) / log(2.) / dim);
+        for (int l = 0; l < ref_levels; l++) {
             mesh->UniformRefinement();
             cout << "Number of vertices after run " << l << ": "
                  << mesh->GetNV() << std::endl;
@@ -94,13 +96,10 @@ int main(int argc, char *argv[])
     //    space associated with the mesh nodes.
     FiniteElementCollection *fec;
     FiniteElementSpace *fespace;
-    if (mesh->NURBSext)
-    {
+    if (mesh->NURBSext) {
         fec = NULL;
         fespace = mesh->GetNodes()->FESpace();
-    }
-    else
-    {
+    } else {
         fec = new H1_FECollection(order, dim);
         fespace = new FiniteElementSpace(mesh, fec, dim);
     }
@@ -127,8 +126,7 @@ int main(int argc, char *argv[])
     //    non-zero on boundary attribute 2 is indicated by the use of piece-wise
     //    constants coefficient for its last component.
     VectorArrayCoefficient f(dim);
-    for (int i = 0; i < dim - 1; i++)
-    {
+    for (int i = 0; i < dim - 1; i++) {
         f.Set(i, new ConstantCoefficient(0.0));
     }
     {
@@ -154,8 +152,8 @@ int main(int argc, char *argv[])
 #endif
 
     // 8. Define the solution vector x_grid as a finite element grid function
-    //    corresponding to fespace. Initialize x_grid with initial guess of zero,
-    //    which satisfies the boundary conditions.
+    //    corresponding to fespace. Initialize x_grid with initial guess of
+    //    zero, which satisfies the boundary conditions.
     GridFunction x_grid(fespace);
     x_grid = 0.0;
 
@@ -178,8 +176,7 @@ int main(int argc, char *argv[])
     //     conditions, applying conforming constraints for non-conforming AMR,
     //     static condensation, etc.
     cout << "matrix ... " << flush;
-    if (static_cond)
-    {
+    if (static_cond) {
         a->EnableStaticCondensation();
     }
     a->Assemble();
@@ -221,30 +218,27 @@ int main(int argc, char *argv[])
     //     element displacement field. We assume that the initial mesh (read
     //     from the file) is not higher order curved mesh compared to the chosen
     //     FE space.
-    if (!mesh->NURBSext)
-    {
+    if (!mesh->NURBSext) {
         mesh->SetNodalFESpace(fespace);
     }
 
-    std::chrono::duration<float> duration = std::chrono::high_resolution_clock::now() - start;
+    std::chrono::duration<float> duration =
+        std::chrono::high_resolution_clock::now() - start;
     std::cout << "It ran for " << duration.count() << "s\n";
     // 15. Send the above data by socket to a GLVis server. Use the "n" and "b"
     //     keys in GLVis to visualize the displacements.
-    if (visualization)
-    {
+    if (visualization) {
         char vishost[] = "localhost";
         int visport = 19916;
         socketstream sol_sock(vishost, visport);
         sol_sock.precision(8);
-        sol_sock << "solution\n"
-                 << *mesh << x_grid << flush;
+        sol_sock << "solution\n" << *mesh << x_grid << flush;
     }
 
     // 16. Free the used memory.
     delete a;
     delete b;
-    if (fec)
-    {
+    if (fec) {
         delete fespace;
         delete fec;
     }

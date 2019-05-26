@@ -12,10 +12,11 @@ AR = $(GCC)gcc-ar$(GCC-SUFFIX)
 RANLIB = $(GCC)gcc-ranlib$(GCC-SUFFIX)
 
 USE_CUDA ?= 0
-CUDA_ARCH ?= sm_61
+CUDA_ARCH ?= sm_30;sm_32;sm_35;sm_37;sm_50;sm_52;sm_53;sm_60;sm_61;sm_62;sm_70;sm_72;sm_75
 USE_MPI ?= 0
 BUILD_MPI ?= 0
 DEBUG ?= 0
+LEAVE_BASE_FOLDERS ?= 0
 
 CMAKE = cmake
 CMAKE_ARGS = \
@@ -25,8 +26,7 @@ CMAKE_ARGS = \
 	"-DCMAKE_C_COMPILER_RANLIB=$(RANLIB)" \
 	"-DCMAKE_CXX_COMPILER=$(CXX)" \
 	"-DCMAKE_CXX_COMPILER_AR=$(AR)" \
-	"-DCMAKE_CXX_COMPILER_RANLIB=$(RANLIB)" \
-	"-DCXX_STANDARD=17"
+	"-DCMAKE_CXX_COMPILER_RANLIB=$(RANLIB)"
 
 ifeq ($(DEBUG), 1)
 	CMAKE_ARGS += "-DCMAKE_BUILD_TYPE=Debug"
@@ -44,29 +44,34 @@ endif
 endif
 
 all: $(INSTALL_DIR)/fem_solver
+configure: $(BUILD_DIR)/CMakeCache.txt
 
 $(BUILD_DIR)/CMakeCache.txt: $(ROOT_DIR)/CMakeLists.txt $(MAKEFILE_LIST)
 	@echo "[CMAKE] $(BUILD_DIR)"
-	@mkdir -p $(dir $@)
+	@mkdir -p $$(readlink -f $(dir $@))
 	cd $(dir $@); $(CMAKE) $(CMAKE_ARGS) $(dir $<)
 
 $(BUILD_DIR)/make.stamp: $(BUILD_DIR)/CMakeCache.txt
 	@echo "[BUILD] $(BUILD_DIR)"
-	@mkdir -p $(INSTALL_DIR)
+	@mkdir -p $$(readlink -f $(INSTALL_DIR))
 	$(MAKE) -C $(dir $<)
 	@touch $@
 
 $(INSTALL_DIR)/fem_solver: $(BUILD_DIR)/make.stamp
 	@echo "[INSTALL] $(INSTALL_DIR)"
-	@mkdir -p $(INSTALL_DIR)
+	@mkdir -p $$(readlink -f $(INSTALL_DIR))
+ifeq ($(DEBUG), 1)
 	$(MAKE) -C $(dir $<) install
+else
+	$(MAKE) -C $(dir $<) install/strip
+endif
 
 clean:
 	@echo "[clean] $(BUILD_DIR) $(INSTALL_DIR)"
 ifeq ($(BUILD_DIR)/Makefile,$(wildcard $(BUILD_DIR)/Makefile))
 	$(MAKE) -C $(BUILD_DIR) clean || echo FAIL
 endif
-	rm -rf $(BUILD_DIR) $(INSTALL_DIR)
+	rm -rf $$(readlink -f $(BUILD_DIR) $(INSTALL_DIR))
 
 # ubuntu pkgs for glvis
 # sudo apt-get install libglu1-mesa-dev libpng-dev libfontconfig1-dev
